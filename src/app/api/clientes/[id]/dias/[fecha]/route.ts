@@ -1,4 +1,4 @@
-import getDb from "@/lib/db";
+import { getDb } from "@/lib/db";
 
 interface Params {
   params: Promise<{ id: string; fecha: string }>;
@@ -13,28 +13,33 @@ export async function PATCH(request: Request, { params }: Params) {
     return Response.json({ error: "Monto inválido" }, { status: 400 });
   }
 
-  const db = getDb();
+  const db = await getDb();
 
-  db.transaction(() => {
-    db.prepare(
-      "DELETE FROM movimientos WHERE cliente_id = ? AND fecha = ?"
-    ).run(id, fecha);
-
-    db.prepare(
-      "INSERT INTO movimientos (cliente_id, monto, descripcion, fecha) VALUES (?, ?, NULL, ?)"
-    ).run(id, monto, fecha);
-  })();
+  await db.batch(
+    [
+      {
+        sql: "DELETE FROM movimientos WHERE cliente_id = ? AND fecha = ?",
+        args: [id, fecha],
+      },
+      {
+        sql: "INSERT INTO movimientos (cliente_id, monto, descripcion, fecha) VALUES (?, ?, NULL, ?)",
+        args: [id, monto, fecha],
+      },
+    ],
+    "write"
+  );
 
   return Response.json({ ok: true });
 }
 
 export async function DELETE(_request: Request, { params }: Params) {
   const { id, fecha } = await params;
-  const db = getDb();
+  const db = await getDb();
 
-  db.prepare(
-    "DELETE FROM movimientos WHERE cliente_id = ? AND fecha = ?"
-  ).run(id, fecha);
+  await db.execute({
+    sql: "DELETE FROM movimientos WHERE cliente_id = ? AND fecha = ?",
+    args: [id, fecha],
+  });
 
   return Response.json({ ok: true });
 }

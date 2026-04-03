@@ -1,4 +1,4 @@
-import getDb from "@/lib/db";
+import { getDb, toRows } from "@/lib/db";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -7,29 +7,23 @@ export async function GET(request: Request) {
   const mes = url.searchParams.get("mes") || mesDefault;
   const clienteId = url.searchParams.get("cliente_id");
 
-  const db = getDb();
+  const db = await getDb();
 
-  let rows: { dia: string; total: number }[];
+  const result = clienteId
+    ? await db.execute({
+        sql: `SELECT strftime('%d', fecha) AS dia, SUM(monto) AS total
+               FROM movimientos
+               WHERE strftime('%Y-%m', fecha) = ? AND cliente_id = ?
+               GROUP BY dia ORDER BY dia`,
+        args: [mes, clienteId],
+      })
+    : await db.execute({
+        sql: `SELECT strftime('%d', fecha) AS dia, SUM(monto) AS total
+               FROM movimientos
+               WHERE strftime('%Y-%m', fecha) = ?
+               GROUP BY dia ORDER BY dia`,
+        args: [mes],
+      });
 
-  if (clienteId) {
-    rows = db
-      .prepare(
-        `SELECT strftime('%d', fecha) AS dia, SUM(monto) AS total
-         FROM movimientos
-         WHERE strftime('%Y-%m', fecha) = ? AND cliente_id = ?
-         GROUP BY dia ORDER BY dia`
-      )
-      .all(mes, clienteId) as { dia: string; total: number }[];
-  } else {
-    rows = db
-      .prepare(
-        `SELECT strftime('%d', fecha) AS dia, SUM(monto) AS total
-         FROM movimientos
-         WHERE strftime('%Y-%m', fecha) = ?
-         GROUP BY dia ORDER BY dia`
-      )
-      .all(mes) as { dia: string; total: number }[];
-  }
-
-  return Response.json(rows);
+  return Response.json(toRows(result));
 }

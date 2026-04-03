@@ -1,4 +1,4 @@
-import getDb from "@/lib/db";
+import { getDb, toRows } from "@/lib/db";
 
 function getMeses(): string[] {
   const ahora = new Date();
@@ -11,48 +11,61 @@ function getMeses(): string[] {
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const clienteId = url.searchParams.get("cliente_id");
-  const db = getDb();
+  const db = await getDb();
   const meses = getMeses();
 
   if (clienteId) {
-    const stmtCobrado = db.prepare(
-      `SELECT COALESCE(SUM(monto), 0) as v FROM movimientos WHERE cliente_id = ? AND strftime('%Y-%m', fecha) = ?`
+    const historial = await Promise.all(
+      meses.map(async (mes) => {
+        const [cobradoRes, pagadoRes] = await Promise.all([
+          db.execute({
+            sql: `SELECT COALESCE(SUM(monto), 0) AS v FROM movimientos WHERE cliente_id = ? AND strftime('%Y-%m', fecha) = ?`,
+            args: [clienteId, mes],
+          }),
+          db.execute({
+            sql: `SELECT monto_pagado AS v FROM pagos WHERE cliente_id = ? AND mes = ?`,
+            args: [clienteId, mes],
+          }),
+        ]);
+        return {
+          mes,
+          totalCobrado: (toRows(cobradoRes)[0] as { v: number }).v,
+          totalPagado: (toRows(pagadoRes)[0] as { v: number })?.v ?? 0,
+        };
+      })
     );
-    const stmtPagado = db.prepare(
-      `SELECT monto_pagado as v FROM pagos WHERE cliente_id = ? AND mes = ?`
-    );
-
-    const historial = meses.map((mes) => ({
-      mes,
-      totalCobrado: (stmtCobrado.get(clienteId, mes) as { v: number }).v,
-      totalPagado:
-        (stmtPagado.get(clienteId, mes) as { v: number } | undefined)?.v ?? 0,
-    }));
-
     return Response.json({ historial });
   }
 
   const totalClientes = (
-    db.prepare("SELECT COUNT(*) as v FROM clientes").get() as { v: number }
+    toRows(await db.execute("SELECT COUNT(*) AS v FROM clientes"))[0] as { v: number }
   ).v;
 
-  const stmtCobrado = db.prepare(
-    `SELECT COALESCE(SUM(monto), 0) as v FROM movimientos WHERE strftime('%Y-%m', fecha) = ?`
+  const historial = await Promise.all(
+    meses.map(async (mes) => {
+      const [cobradoRes, pagadoRes, pagaronRes] = await Promise.all([
+        db.execute({
+          sql: `SELECT COALESCE(SUM(monto), 0) AS v FROM movimientos WHERE strftime('%Y-%m', fecha) = ?`,
+          args: [mes],
+        }),
+        db.execute({
+          sql: `SELECT COALESCE(SUM(monto_pagado), 0) AS v FROM pagos WHERE mes = ?`,
+          args: [mes],
+        }),
+        db.execute({
+          sql: `SELECT COUNT(*) AS v FROM pagos WHERE mes = ?`,
+          args: [mes],
+        }),
+      ]);
+      return {
+        mes,
+        totalCobrado: (toRows(cobradoRes)[0] as { v: number }).v,
+        totalPagado: (toRows(pagadoRes)[0] as { v: number }).v,
+        clientesPagaron: (toRows(pagaronRes)[0] as { v: number }).v,
+        totalClientes,
+      };
+    })
   );
-  const stmtPagado = db.prepare(
-    `SELECT COALESCE(SUM(monto_pagado), 0) as v FROM pagos WHERE mes = ?`
-  );
-  const stmtPagaron = db.prepare(
-    `SELECT COUNT(*) as v FROM pagos WHERE mes = ?`
-  );
-
-  const historial = meses.map((mes) => ({
-    mes,
-    totalCobrado: (stmtCobrado.get(mes) as { v: number }).v,
-    totalPagado: (stmtPagado.get(mes) as { v: number }).v,
-    clientesPagaron: (stmtPagaron.get(mes) as { v: number }).v,
-    totalClientes,
-  }));
 
   return Response.json({ historial });
 }

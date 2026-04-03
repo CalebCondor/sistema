@@ -1,4 +1,4 @@
-import getDb from "@/lib/db";
+import { getDb } from "@/lib/db";
 
 interface Params {
   params: Promise<{ id: string; movId: string }>;
@@ -15,38 +15,39 @@ export async function PATCH(request: Request, { params }: Params) {
     return Response.json({ error: "Monto inválido" }, { status: 400 });
   }
 
-  const db = getDb();
-
-  const mov = db
-    .prepare("SELECT * FROM movimientos WHERE id = ? AND cliente_id = ?")
-    .get(movId, id);
-
-  if (!mov) {
+  const db = await getDb();
+  const check = await db.execute({
+    sql: "SELECT id FROM movimientos WHERE id = ? AND cliente_id = ?",
+    args: [movId, id],
+  });
+  if (!check.rows.length) {
     return Response.json({ error: "Movimiento no encontrado" }, { status: 404 });
   }
 
-  db.prepare(
-    `UPDATE movimientos
-     SET monto = ?, descripcion = ?
-     WHERE id = ? AND cliente_id = ?`
-  ).run(monto, descripcion ?? null, movId, id);
+  await db.execute({
+    sql: `UPDATE movimientos SET monto = ?, descripcion = ? WHERE id = ? AND cliente_id = ?`,
+    args: [monto, descripcion ?? null, movId, id],
+  });
 
   return Response.json({ ok: true });
 }
 
 export async function DELETE(_request: Request, { params }: Params) {
   const { id, movId } = await params;
-  const db = getDb();
+  const db = await getDb();
 
-  const mov = db
-    .prepare("SELECT * FROM movimientos WHERE id = ? AND cliente_id = ?")
-    .get(movId, id);
-
-  if (!mov) {
+  const check = await db.execute({
+    sql: "SELECT id FROM movimientos WHERE id = ? AND cliente_id = ?",
+    args: [movId, id],
+  });
+  if (!check.rows.length) {
     return Response.json({ error: "Movimiento no encontrado" }, { status: 404 });
   }
 
-  db.prepare("DELETE FROM movimientos WHERE id = ? AND cliente_id = ?").run(movId, id);
+  await db.execute({
+    sql: "DELETE FROM movimientos WHERE id = ? AND cliente_id = ?",
+    args: [movId, id],
+  });
 
   return Response.json({ ok: true });
 }

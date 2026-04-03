@@ -1,19 +1,17 @@
-import getDb from "@/lib/db";
+import { getDb, toRows } from "@/lib/db";
 
 export async function GET() {
-  const db = getDb();
-  const clientes = db
-    .prepare(
-      `SELECT c.id, c.nombre, c.telefono, c.created_at,
+  const db = await getDb();
+  const result = await db.execute(
+    `SELECT c.id, c.nombre, c.telefono, c.created_at,
         COALESCE(SUM(m.monto), 0) AS total_mes
        FROM clientes c
        LEFT JOIN movimientos m ON m.cliente_id = c.id
          AND strftime('%Y-%m', m.fecha) = strftime('%Y-%m', 'now')
        GROUP BY c.id
        ORDER BY c.nombre ASC`
-    )
-    .all();
-  return Response.json(clientes);
+  );
+  return Response.json(toRows(result));
 }
 
 export async function POST(request: Request) {
@@ -25,14 +23,16 @@ export async function POST(request: Request) {
     return Response.json({ error: "El nombre es requerido" }, { status: 400 });
   }
 
-  const db = getDb();
-  const result = db
-    .prepare("INSERT INTO clientes (nombre, telefono) VALUES (?, ?)")
-    .run(nombre, telefono || null);
+  const db = await getDb();
+  const ins = await db.execute({
+    sql: "INSERT INTO clientes (nombre, telefono) VALUES (?, ?)",
+    args: [nombre, telefono || null],
+  });
 
-  const cliente = db
-    .prepare("SELECT * FROM clientes WHERE id = ?")
-    .get(result.lastInsertRowid);
+  const clienteRes = await db.execute({
+    sql: "SELECT * FROM clientes WHERE id = ?",
+    args: [Number(ins.lastInsertRowid)],
+  });
 
-  return Response.json(cliente, { status: 201 });
+  return Response.json(toRows(clienteRes)[0], { status: 201 });
 }

@@ -1,4 +1,4 @@
-import getDb from "@/lib/db";
+import { getDb, toRows } from "@/lib/db";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -6,35 +6,36 @@ interface Params {
 
 export async function GET(_request: Request, { params }: Params) {
   const { id } = await params;
-  const db = getDb();
+  const db = await getDb();
 
-  const cliente = db
-    .prepare("SELECT * FROM clientes WHERE id = ?")
-    .get(id);
-
-  if (!cliente) {
+  const clienteRes = await db.execute({
+    sql: "SELECT * FROM clientes WHERE id = ?",
+    args: [id],
+  });
+  if (!clienteRes.rows.length) {
     return Response.json({ error: "Cliente no encontrado" }, { status: 404 });
   }
+  const cliente = toRows(clienteRes)[0];
 
-  const movimientos = db
-    .prepare(
-      `SELECT * FROM movimientos
-       WHERE cliente_id = ?
-         AND strftime('%Y-%m', fecha) = strftime('%Y-%m', 'now')
-       ORDER BY created_at DESC`
-    )
-    .all(id);
+  const [movRes, totalRes] = await Promise.all([
+    db.execute({
+      sql: `SELECT * FROM movimientos
+             WHERE cliente_id = ?
+               AND strftime('%Y-%m', fecha) = strftime('%Y-%m', 'now')
+             ORDER BY created_at DESC`,
+      args: [id],
+    }),
+    db.execute({
+      sql: `SELECT COALESCE(SUM(monto), 0) AS total
+             FROM movimientos
+             WHERE cliente_id = ?
+               AND strftime('%Y-%m', fecha) = strftime('%Y-%m', 'now')`,
+      args: [id],
+    }),
+  ]);
 
-  const totalMes = db
-    .prepare(
-      `SELECT COALESCE(SUM(monto), 0) AS total
-       FROM movimientos
-       WHERE cliente_id = ?
-         AND strftime('%Y-%m', fecha) = strftime('%Y-%m', 'now')`
-    )
-    .get(id) as { total: number };
-
-  return Response.json({ cliente, movimientos, totalMes: totalMes.total });
+  const totalMes = (toRows(totalRes)[0] as { total: number }).total;
+  return Response.json({ cliente, movimientos: toRows(movRes), totalMes });
 }
 
 export async function POST(request: Request, { params }: Params) {
@@ -47,22 +48,24 @@ export async function POST(request: Request, { params }: Params) {
     return Response.json({ error: "Monto inválido" }, { status: 400 });
   }
 
-  const db = getDb();
-
-  const cliente = db.prepare("SELECT id FROM clientes WHERE id = ?").get(id);
-  if (!cliente) {
+  const db = await getDb();
+  const check = await db.execute({
+    sql: "SELECT id FROM clientes WHERE id = ?",
+    args: [id],
+  });
+  if (!check.rows.length) {
     return Response.json({ error: "Cliente no encontrado" }, { status: 404 });
   }
 
-  const result = db
-    .prepare(
-      "INSERT INTO movimientos (cliente_id, monto, descripcion) VALUES (?, ?, ?)"
-    )
-    .run(id, monto, descripcion || null);
+  const ins = await db.execute({
+    sql: "INSERT INTO movimientos (cliente_id, monto, descripcion) VALUES (?, ?, ?)",
+    args: [id, monto, descripcion || null],
+  });
 
-  const movimiento = db
-    .prepare("SELECT * FROM movimientos WHERE id = ?")
-    .get(result.lastInsertRowid);
+  const movRes = await db.execute({
+    sql: "SELECT * FROM movimientos WHERE id = ?",
+    args: [Number(ins.lastInsertRowid)],
+  });
 
-  return Response.json(movimiento, { status: 201 });
+  return Response.json(toRows(movRes)[0], { status: 201 });
 }

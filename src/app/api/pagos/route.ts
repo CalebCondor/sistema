@@ -1,4 +1,4 @@
-import getDb from "@/lib/db";
+import { getDb, toRows } from "@/lib/db";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -6,11 +6,9 @@ export async function GET(request: Request) {
   const mesDefault = `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, "0")}`;
   const mes = url.searchParams.get("mes") || mesDefault;
 
-  const db = getDb();
-
-  const clientes = db
-    .prepare(
-      `SELECT
+  const db = await getDb();
+  const result = await db.execute({
+    sql: `SELECT
         c.id,
         c.nombre,
         c.telefono,
@@ -24,11 +22,11 @@ export async function GET(request: Request) {
        LEFT JOIN pagos p
          ON p.cliente_id = c.id AND p.mes = ?
        GROUP BY c.id
-       ORDER BY c.nombre ASC`
-    )
-    .all(mes, mes);
+       ORDER BY c.nombre ASC`,
+    args: [mes, mes],
+  });
 
-  return Response.json(clientes);
+  return Response.json(toRows(result));
 }
 
 export async function POST(request: Request) {
@@ -41,14 +39,14 @@ export async function POST(request: Request) {
     return Response.json({ error: "Datos inválidos" }, { status: 400 });
   }
 
-  const db = getDb();
-
-  db.prepare(
-    `INSERT INTO pagos (cliente_id, mes, monto_pagado)
+  const db = await getDb();
+  await db.execute({
+    sql: `INSERT INTO pagos (cliente_id, mes, monto_pagado)
      VALUES (?, ?, ?)
      ON CONFLICT(cliente_id, mes)
-     DO UPDATE SET monto_pagado = excluded.monto_pagado, fecha_pago = date('now')`
-  ).run(cliente_id, mes, monto_pagado);
+     DO UPDATE SET monto_pagado = excluded.monto_pagado, fecha_pago = date('now')`,
+    args: [cliente_id, mes, monto_pagado],
+  });
 
   return Response.json({ ok: true });
 }

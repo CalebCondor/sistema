@@ -43,6 +43,8 @@ export async function POST(request: Request, { params }: Params) {
   const body = await request.json();
   const monto = parseFloat(body.monto);
   const descripcion = String(body.descripcion ?? "").trim();
+  const fechaRaw = String(body.fecha ?? "").trim();
+  const fecha = /^\d{4}-\d{2}-\d{2}$/.test(fechaRaw) ? fechaRaw : null;
 
   if (isNaN(monto) || monto <= 0) {
     return Response.json({ error: "Monto inválido" }, { status: 400 });
@@ -57,10 +59,15 @@ export async function POST(request: Request, { params }: Params) {
     return Response.json({ error: "Cliente no encontrado" }, { status: 404 });
   }
 
-  const ins = await db.execute({
-    sql: "INSERT INTO movimientos (cliente_id, monto, descripcion) VALUES (?, ?, ?)",
-    args: [id, monto, descripcion || null],
-  });
+  const ins = fecha
+    ? await db.execute({
+        sql: "INSERT INTO movimientos (cliente_id, monto, descripcion, fecha) VALUES (?, ?, ?, ?)",
+        args: [id, monto, descripcion || null, fecha],
+      })
+    : await db.execute({
+        sql: "INSERT INTO movimientos (cliente_id, monto, descripcion) VALUES (?, ?, ?)",
+        args: [id, monto, descripcion || null],
+      });
 
   const movRes = await db.execute({
     sql: "SELECT * FROM movimientos WHERE id = ?",

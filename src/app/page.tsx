@@ -154,17 +154,6 @@ export default function Home() {
     await cargarClientes();
   }
 
-  async function eliminarCliente(id: number) {
-    setConfirmacion({
-      titulo: "Eliminar cliente",
-      descripcion: "¿Estás seguro? Se eliminarán todos sus movimientos y pagos registrados.",
-      onConfirm: async () => {
-        await fetch(`/api/clientes/${id}`, { method: "DELETE" });
-        await cargarClientes();
-      },
-    });
-  }
-
   function formatMonto(n: number) {
     return n.toLocaleString("es", {
       minimumFractionDigits: 2,
@@ -253,22 +242,9 @@ export default function Home() {
                         </p>
                       )}
                     </div>
-                    <div className="flex items-center gap-3">
-                      <Badge variant="secondary" className="text-sm px-3 py-1">
-                        S/ {formatMonto(c.total_mes)}
-                      </Badge>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-destructive hover:text-destructive"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          eliminarCliente(c.id);
-                        }}
-                      >
-                        ✕
-                      </Button>
-                    </div>
+                    <Badge variant="secondary" className="text-sm px-3 py-1">
+                      S/ {formatMonto(c.total_mes)}
+                    </Badge>
                   </CardContent>
                 </Card>
               ))}

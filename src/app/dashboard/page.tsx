@@ -98,6 +98,7 @@ function formatMes(mes: string): string {
   });
 }
 
+
 function fmt(n: number): string {
   return n.toLocaleString("es", {
     minimumFractionDigits: 2,

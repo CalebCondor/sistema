@@ -6,9 +6,9 @@ let schemaReady = false;
 
 function getClient(): Client {
   if (!db) {
-    const url = process.env.TURSO_DATABASE_URL;
+    const url = "libsql://tienda-calebcc26.aws-us-west-2.turso.io";
     if (!url) throw new Error("TURSO_DATABASE_URL is not set");
-    db = createClient({ url, authToken: process.env.TURSO_AUTH_TOKEN });
+    db = createClient({ url, authToken: "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NzUyMzcxOTEsImlkIjoiMDE5ZDU0NWQtMDAwMS03YmVjLTlkY2ItOWMxOTkyNWViMTQzIiwicmlkIjoiN2VkMzllMzEtZjAyYi00OWVhLWI3MjMtOTFmOTFlZjllYWIzIn0.w2M5Xt93rFOrE2ntD3Pg2xlJT76oRlR9KMC7oXm82KMZ6DqDn48Z0acsP3s3GSSvibudcMPpv1gNZgLj5dm0Aw" });
   }
   return db;
 }

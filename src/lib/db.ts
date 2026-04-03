@@ -1,16 +1,21 @@
 import { createClient } from "@libsql/client";
-import type { ResultSet } from "@libsql/client";
+import type { Client, ResultSet } from "@libsql/client";
 
-const db = createClient({
-  url: process.env.TURSO_DATABASE_URL!,
-  authToken: process.env.TURSO_AUTH_TOKEN,
-});
-
+let db: Client | null = null;
 let schemaReady = false;
+
+function getClient(): Client {
+  if (!db) {
+    const url = process.env.TURSO_DATABASE_URL;
+    if (!url) throw new Error("TURSO_DATABASE_URL is not set");
+    db = createClient({ url, authToken: process.env.TURSO_AUTH_TOKEN });
+  }
+  return db;
+}
 
 async function ensureSchema(): Promise<void> {
   if (schemaReady) return;
-  await db.batch(
+  await getClient().batch(
     [
       `CREATE TABLE IF NOT EXISTS clientes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -47,7 +52,7 @@ export function toRows<T = Record<string, unknown>>(result: ResultSet): T[] {
   ) as T[];
 }
 
-export async function getDb() {
+export async function getDb(): Promise<Client> {
   await ensureSchema();
-  return db;
+  return getClient();
 }
